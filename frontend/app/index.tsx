@@ -139,8 +139,9 @@ export default function Home() {
     setRefreshing(false);
   };
 
-  // Merge news and ads: each ad displays only in its assigned slot
-  // Slot 1 = after first 3 news, Slot 2 = after next 3 news, etc.
+  // Merge news and ads: ad space appears after EVERY 3 news items (always)
+  // Slot 1 = after news 1-3, Slot 2 = after news 4-6, etc.
+  // If a slot has an uploaded ad, show it; otherwise show empty placeholder
   const mergeNewsWithAds = () => {
     const merged: any[] = [];
 
@@ -153,12 +154,14 @@ export default function Home() {
     news.forEach((newsItem, index) => {
       merged.push({ type: 'news', data: newsItem });
 
-      // After every 3 news items, check if there's an ad for this slot
+      // After every 3 news items, ALWAYS insert an ad slot (filled or empty)
       if ((index + 1) % 3 === 0) {
         const slotNumber = (index + 1) / 3; // Slot 1, 2, 3, ...
         const adForSlot = adsBySlot[slotNumber];
         if (adForSlot) {
-          merged.push({ type: 'ad', data: adForSlot, key: `ad-slot-${slotNumber}` });
+          merged.push({ type: 'ad', data: adForSlot, slot: slotNumber });
+        } else {
+          merged.push({ type: 'ad-empty', slot: slotNumber });
         }
       }
     });
@@ -200,11 +203,21 @@ export default function Home() {
     </View>
   );
 
+  const renderEmptyAdSlot = (slotNumber: number) => (
+    <View style={styles.emptyAdCard}>
+      <MaterialIcons name="campaign" size={20} color="#9CA3AF" />
+      <Text style={styles.emptyAdLabel}>Ad Slot {slotNumber}</Text>
+      <Text style={styles.emptyAdSub}>Available for advertisement</Text>
+    </View>
+  );
+
   const renderItem = ({ item }: any) => {
     if (item.type === 'news') {
       return renderNewsCard(item.data);
-    } else {
+    } else if (item.type === 'ad') {
       return renderAdCard(item.data);
+    } else {
+      return renderEmptyAdSlot(item.slot);
     }
   };
 
@@ -270,7 +283,11 @@ export default function Home() {
         <FlatList
           data={mergeNewsWithAds()}
           renderItem={renderItem}
-          keyExtractor={(item, index) => `${item.type}-${item.data?.id || index}`}
+          keyExtractor={(item, index) => {
+            if (item.type === 'news') return `news-${item.data.id}`;
+            if (item.type === 'ad') return `ad-${item.data.id}-slot-${item.slot}`;
+            return `ad-empty-slot-${item.slot}`;
+          }}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC143C']} />
@@ -545,6 +562,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#000',
+  },
+  emptyAdCard: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: '#D1D5DB',
+  },
+  emptyAdLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#6B7280',
+    marginTop: 6,
+    letterSpacing: 0.5,
+  },
+  emptyAdSub: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 2,
   },
   modalOverlay: {
     flex: 1,
