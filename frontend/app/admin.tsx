@@ -32,9 +32,14 @@ export default function Admin() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
-  const [activeTab, setActiveTab] = useState<'ads' | 'news'>('ads');
+  const [activeTab, setActiveTab] = useState<'ads' | 'news' | 'manage'>('ads');
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Manage content lists
+  const [manageNewsList, setManageNewsList] = useState<any[]>([]);
+  const [manageAdsList, setManageAdsList] = useState<any[]>([]);
+  const [manageSubTab, setManageSubTab] = useState<'news' | 'ads'>('news');
 
   // Ad form
   const [adTitle, setAdTitle] = useState('');
@@ -218,6 +223,61 @@ export default function Admin() {
     }
   };
 
+  const loadManageData = async () => {
+    setLoading(true);
+    try {
+      const [newsRes, adsRes] = await Promise.all([
+        axios.get(`${BACKEND_URL}/api/admin/news/list`),
+        axios.get(`${BACKEND_URL}/api/admin/ads/list`),
+      ]);
+      setManageNewsList(newsRes.data.news || []);
+      setManageAdsList(adsRes.data.ads || []);
+    } catch (error: any) {
+      showStatus('error', 'Failed to load content');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const confirmDelete = (message: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (Platform.OS === 'web') {
+        resolve(window.confirm(message));
+      } else {
+        Alert.alert('Confirm Delete', message, [
+          { text: 'Cancel', onPress: () => resolve(false), style: 'cancel' },
+          { text: 'Delete', onPress: () => resolve(true), style: 'destructive' },
+        ]);
+      }
+    });
+  };
+
+  const deleteNewsItem = async (id: string, title: string) => {
+    const ok = await confirmDelete(`Delete news: "${title}"?`);
+    if (!ok) return;
+
+    try {
+      await axios.delete(`${BACKEND_URL}/api/admin/news/${id}`);
+      showStatus('success', 'News deleted!');
+      setManageNewsList((prev) => prev.filter((n) => n.id !== id));
+    } catch (error: any) {
+      showStatus('error', 'Failed to delete news');
+    }
+  };
+
+  const deleteAdItem = async (id: string, title: string) => {
+    const ok = await confirmDelete(`Delete ad: "${title}"?`);
+    if (!ok) return;
+
+    try {
+      await axios.delete(`${BACKEND_URL}/api/admin/ads/${id}`);
+      showStatus('success', 'Ad deleted!');
+      setManageAdsList((prev) => prev.filter((a) => a.id !== id));
+    } catch (error: any) {
+      showStatus('error', 'Failed to delete ad');
+    }
+  };
+
   if (!isAuthenticated) {
     return (
       <KeyboardAvoidingView
@@ -299,9 +359,9 @@ export default function Admin() {
           onPress={() => setActiveTab('ads')}
           testID="ads-tab"
         >
-          <MaterialIcons name="campaign" size={20} color={activeTab === 'ads' ? '#DC143C' : '#666'} />
+          <MaterialIcons name="campaign" size={18} color={activeTab === 'ads' ? '#DC143C' : '#666'} />
           <Text style={[styles.tabText, activeTab === 'ads' && styles.activeTabText]}>
-            Upload Ads
+            Ads
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -309,18 +369,31 @@ export default function Admin() {
           onPress={() => setActiveTab('news')}
           testID="news-tab"
         >
-          <MaterialIcons name="article" size={20} color={activeTab === 'news' ? '#DC143C' : '#666'} />
+          <MaterialIcons name="article" size={18} color={activeTab === 'news' ? '#DC143C' : '#666'} />
           <Text style={[styles.tabText, activeTab === 'news' && styles.activeTabText]}>
-            Create News
+            News
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'manage' && styles.activeTab]}
+          onPress={() => {
+            setActiveTab('manage');
+            loadManageData();
+          }}
+          testID="manage-tab"
+        >
+          <MaterialIcons name="settings" size={18} color={activeTab === 'manage' ? '#DC143C' : '#666'} />
+          <Text style={[styles.tabText, activeTab === 'manage' && styles.activeTabText]}>
+            Manage
           </Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        {activeTab === 'ads' ? (
+        {activeTab === 'ads' && (
           <View style={styles.form}>
             <Text style={styles.formTitle}>Upload Advertisement</Text>
-            <Text style={styles.formSubtitle}>Ads appear after every 3 news items</Text>
+            <Text style={styles.formSubtitle}>Each ad shows only in its assigned slot</Text>
 
             <Text style={styles.label}>Ad Title *</Text>
             <TextInput
@@ -332,16 +405,17 @@ export default function Admin() {
               testID="ad-title-input"
             />
 
-            <Text style={styles.label}>Position Number *</Text>
+            <Text style={styles.label}>Slot Number *</Text>
             <TextInput
               style={styles.input}
-              placeholder="Enter position (1, 2, 3, 4...)"
+              placeholder="e.g. 1 = after 1st 3 news, 2 = after next 3..."
               value={adPosition}
               onChangeText={setAdPosition}
               keyboardType="numeric"
               placeholderTextColor="#999"
               testID="ad-position-input"
             />
+            <Text style={styles.helperText}>Slot 1 → after news 1-3 · Slot 2 → after news 4-6 · etc.</Text>
 
             <Text style={styles.label}>Duration in seconds (optional)</Text>
             <TextInput
@@ -375,7 +449,9 @@ export default function Admin() {
               )}
             </TouchableOpacity>
           </View>
-        ) : (
+        )}
+
+        {activeTab === 'news' && (
           <View style={styles.form}>
             <Text style={styles.formTitle}>Create News Article</Text>
             <Text style={styles.formSubtitle}>Admin news appears on top of the feed</Text>
@@ -454,6 +530,102 @@ export default function Admin() {
                 <Text style={styles.submitButtonText}>Create News</Text>
               )}
             </TouchableOpacity>
+          </View>
+        )}
+
+        {activeTab === 'manage' && (
+          <View style={styles.form}>
+            <Text style={styles.formTitle}>Manage Content</Text>
+            <Text style={styles.formSubtitle}>Delete news articles and ads</Text>
+
+            {/* Sub-tabs */}
+            <View style={styles.subTabContainer}>
+              <TouchableOpacity
+                style={[styles.subTab, manageSubTab === 'news' && styles.subTabActive]}
+                onPress={() => setManageSubTab('news')}
+                testID="manage-news-subtab"
+              >
+                <Text style={[styles.subTabText, manageSubTab === 'news' && styles.subTabTextActive]}>
+                  News ({manageNewsList.length})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.subTab, manageSubTab === 'ads' && styles.subTabActive]}
+                onPress={() => setManageSubTab('ads')}
+                testID="manage-ads-subtab"
+              >
+                <Text style={[styles.subTabText, manageSubTab === 'ads' && styles.subTabTextActive]}>
+                  Ads ({manageAdsList.length})
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.refreshLink} onPress={loadManageData} testID="reload-manage">
+              <MaterialIcons name="refresh" size={18} color="#DC143C" />
+              <Text style={styles.refreshLinkText}>Reload</Text>
+            </TouchableOpacity>
+
+            {loading && <ActivityIndicator color="#DC143C" style={{ marginTop: 16 }} />}
+
+            {/* News List */}
+            {manageSubTab === 'news' && (
+              <View style={{ marginTop: 8 }}>
+                {manageNewsList.length === 0 && !loading && (
+                  <Text style={styles.emptyText}>No news available</Text>
+                )}
+                {manageNewsList.map((item) => (
+                  <View key={item.id} style={styles.manageItem} testID={`manage-news-${item.id}`}>
+                    <View style={styles.manageItemContent}>
+                      {item.isAdminNews && (
+                        <View style={styles.adminTag}>
+                          <Text style={styles.adminTagText}>ADMIN</Text>
+                        </View>
+                      )}
+                      <Text style={styles.manageItemTitle} numberOfLines={2}>{item.title}</Text>
+                      <Text style={styles.manageItemMeta}>
+                        {item.language} · {item.state}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.deleteButton}
+                      onPress={() => deleteNewsItem(item.id, item.title)}
+                      testID={`delete-news-${item.id}`}
+                    >
+                      <MaterialIcons name="delete" size={22} color="#FFF" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Ads List */}
+            {manageSubTab === 'ads' && (
+              <View style={{ marginTop: 8 }}>
+                {manageAdsList.length === 0 && !loading && (
+                  <Text style={styles.emptyText}>No ads uploaded yet</Text>
+                )}
+                {manageAdsList.map((item) => (
+                  <View key={item.id} style={styles.manageItem} testID={`manage-ad-${item.id}`}>
+                    <View style={styles.manageItemContent}>
+                      <View style={styles.slotTag}>
+                        <Text style={styles.slotTagText}>SLOT {item.position}</Text>
+                      </View>
+                      <Text style={styles.manageItemTitle} numberOfLines={2}>{item.title}</Text>
+                      <Text style={styles.manageItemMeta}>
+                        Type: {item.mediaType}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.deleteButton}
+                      onPress={() => deleteAdItem(item.id, item.title)}
+                      testID={`delete-ad-${item.id}`}
+                    >
+                      <MaterialIcons name="delete" size={22} color="#FFF" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         )}
       </ScrollView>
@@ -643,5 +815,115 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  helperText: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  subTabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    padding: 4,
+    marginTop: 16,
+  },
+  subTab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 6,
+  },
+  subTabActive: {
+    backgroundColor: '#DC143C',
+  },
+  subTabText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '600',
+  },
+  subTabTextActive: {
+    color: '#FFF',
+  },
+  refreshLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 8,
+    gap: 4,
+  },
+  refreshLinkText: {
+    color: '#DC143C',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#999',
+    fontSize: 14,
+    paddingVertical: 24,
+  },
+  manageItem: {
+    flexDirection: 'row',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  manageItemContent: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  manageItemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111',
+    marginBottom: 4,
+  },
+  manageItemMeta: {
+    fontSize: 12,
+    color: '#666',
+  },
+  adminTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#DC143C',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 3,
+    marginBottom: 4,
+  },
+  adminTagText: {
+    color: '#FFF',
+    fontSize: 9,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  slotTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#1F2937',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 3,
+    marginBottom: 4,
+  },
+  slotTagText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  deleteButton: {
+    backgroundColor: '#EF4444',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

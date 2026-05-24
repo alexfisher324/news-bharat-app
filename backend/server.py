@@ -423,6 +423,26 @@ async def trigger_news_fetch():
         logger.error(f"Error triggering fetch: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@api_router.get("/admin/news/list")
+async def list_all_news_admin():
+    """Admin: List all news for management"""
+    try:
+        news_items = await db.news.find({}, {"_id": 0, "content": 0}).sort([("isAdminNews", -1), ("createdAt", -1)]).to_list(500)
+        return {"news": news_items, "total": len(news_items)}
+    except Exception as e:
+        logger.error(f"Error listing news: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/admin/ads/list")
+async def list_all_ads_admin():
+    """Admin: List all ads for management"""
+    try:
+        ads = await db.ads.find({}, {"_id": 0, "media": 0}).sort("position", 1).to_list(500)
+        return {"ads": ads, "total": len(ads)}
+    except Exception as e:
+        logger.error(f"Error listing ads: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @api_router.delete("/admin/news/{news_id}")
 async def delete_news(news_id: str):
     """Admin: Delete news"""

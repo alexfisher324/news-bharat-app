@@ -139,18 +139,27 @@ export default function Home() {
     setRefreshing(false);
   };
 
-  // Merge news and ads: ad after every 3 news items (cycle ads if fewer than needed)
+  // Merge news and ads: each ad displays only in its assigned slot
+  // Slot 1 = after first 3 news, Slot 2 = after next 3 news, etc.
   const mergeNewsWithAds = () => {
     const merged: any[] = [];
+
+    // Build slot map: slot number -> ad
+    const adsBySlot: { [key: number]: Ad } = {};
+    ads.forEach((ad) => {
+      adsBySlot[ad.position] = ad;
+    });
 
     news.forEach((newsItem, index) => {
       merged.push({ type: 'news', data: newsItem });
 
-      // Add ad after every 3 news items
-      if ((index + 1) % 3 === 0 && ads.length > 0) {
-        // Cycle through ads if we have more news groups than ads
-        const adIndex = Math.floor(index / 3) % ads.length;
-        merged.push({ type: 'ad', data: ads[adIndex], key: `ad-${index}` });
+      // After every 3 news items, check if there's an ad for this slot
+      if ((index + 1) % 3 === 0) {
+        const slotNumber = (index + 1) / 3; // Slot 1, 2, 3, ...
+        const adForSlot = adsBySlot[slotNumber];
+        if (adForSlot) {
+          merged.push({ type: 'ad', data: adForSlot, key: `ad-slot-${slotNumber}` });
+        }
       }
     });
 
@@ -183,7 +192,7 @@ export default function Home() {
 
   const renderAdCard = (ad: Ad) => (
     <View style={styles.adCard}>
-      <Text style={styles.adLabel}>ADVERTISEMENT</Text>
+      <Text style={styles.adLabel}>ADVERTISEMENT · Slot {ad.position}</Text>
       {ad.mediaType === 'image' && (
         <Image source={{ uri: ad.media }} style={styles.adImage} />
       )}
