@@ -452,6 +452,8 @@ async def delete_news(news_id: str):
             return {"success": True, "message": "News deleted"}
         else:
             raise HTTPException(status_code=404, detail="News not found")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error deleting news: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -465,6 +467,8 @@ async def delete_ad(ad_id: str):
             return {"success": True, "message": "Ad deleted"}
         else:
             raise HTTPException(status_code=404, detail="Ad not found")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error deleting ad: {e}")
         raise HTTPException(status_code=500, detail=str(e))
