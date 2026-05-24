@@ -80,6 +80,7 @@ class News(BaseModel):
     publishedAt: datetime
     createdAt: datetime = Field(default_factory=datetime.utcnow)
     isActive: bool = True
+    isAdminNews: bool = False  # Flag to identify admin-uploaded news
 
 class NewsCreate(BaseModel):
     title: str
@@ -328,7 +329,7 @@ async def get_news(
     skip: int = 0,
     limit: int = 50
 ):
-    """Get news with pagination and filters"""
+    """Get news with pagination and filters - admin news first, then API news"""
     try:
         query = {"isActive": True, "language": language}
         
@@ -340,7 +341,8 @@ async def get_news(
             query["state"] = "International"
         
         total = await db.news.count_documents(query)
-        news_items = await db.news.find(query).sort("createdAt", -1).skip(skip).limit(limit).to_list(limit)
+        # Sort by isAdminNews (True first), then by createdAt (newest first)
+        news_items = await db.news.find(query).sort([("isAdminNews", -1), ("createdAt", -1)]).skip(skip).limit(limit).to_list(limit)
         
         news_list = [News(**item) for item in news_items]
         
@@ -380,7 +382,8 @@ async def create_news(news: NewsCreate):
             state=news.state,
             language=news.language,
             source="THE BHARAT",
-            publishedAt=datetime.utcnow()
+            publishedAt=datetime.utcnow(),
+            isAdminNews=True
         )
         
         await db.news.insert_one(news_obj.dict())

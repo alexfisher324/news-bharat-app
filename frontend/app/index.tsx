@@ -29,6 +29,7 @@ interface NewsItem {
   state: string;
   language: string;
   isActive: boolean;
+  isAdminNews?: boolean;
 }
 
 interface Ad {
@@ -104,7 +105,7 @@ export default function Home() {
     try {
       setLoading(true);
       const response = await axios.get(
-        `${BACKEND_URL}/api/news?language=${selectedLanguage}&state=${selectedState}&limit=100`
+        `${BACKEND_URL}/api/news?language=${selectedLanguage}&state=${selectedState}&limit=200`
       );
       setNews(response.data.news || []);
     } catch (error) {
@@ -130,18 +131,18 @@ export default function Home() {
     setRefreshing(false);
   };
 
-  // Merge news and ads: ad after every 3 news items
+  // Merge news and ads: ad after every 3 news items (cycle ads if fewer than needed)
   const mergeNewsWithAds = () => {
     const merged: any[] = [];
-    let adIndex = 0;
 
     news.forEach((newsItem, index) => {
       merged.push({ type: 'news', data: newsItem });
 
       // Add ad after every 3 news items
-      if ((index + 1) % 3 === 0 && adIndex < ads.length) {
-        merged.push({ type: 'ad', data: ads[adIndex] });
-        adIndex++;
+      if ((index + 1) % 3 === 0 && ads.length > 0) {
+        // Cycle through ads if we have more news groups than ads
+        const adIndex = Math.floor(index / 3) % ads.length;
+        merged.push({ type: 'ad', data: ads[adIndex], key: `ad-${index}` });
       }
     });
 
@@ -150,10 +151,16 @@ export default function Home() {
 
   const renderNewsCard = (newsItem: NewsItem) => (
     <TouchableOpacity
-      style={styles.newsCard}
+      style={[styles.newsCard, newsItem.isAdminNews && styles.adminNewsCard]}
       onPress={() => setSelectedNews(newsItem)}
       activeOpacity={0.8}
+      testID={`news-card-${newsItem.id}`}
     >
+      {newsItem.isAdminNews && (
+        <View style={styles.adminBadge}>
+          <Text style={styles.adminBadgeText}>EXCLUSIVE</Text>
+        </View>
+      )}
       {newsItem.imageUrl && (
         <Image source={{ uri: newsItem.imageUrl }} style={styles.newsImage} />
       )}
@@ -188,44 +195,51 @@ export default function Home() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.logo}>THE BHARAT</Text>
-        <View style={styles.headerActions}>
+        {/* Top Row: Logo + 3-dot Menu */}
+        <View style={styles.headerTopRow}>
+          <Text style={styles.logo}>THE BHARAT</Text>
+          <TouchableOpacity
+            onPress={() => router.push('/admin')}
+            style={styles.menuButton}
+            testID="admin-menu-button"
+          >
+            <MaterialIcons name="more-vert" size={28} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Bottom Row: Coin + State + Language */}
+        <View style={styles.headerBottomRow}>
           {/* Coin Icon */}
           <TouchableOpacity
             onPress={() => setShowCoinModal(true)}
-            style={styles.iconButton}
+            style={styles.coinButton}
+            testID="coin-button"
           >
-            <MaterialIcons name="monetization-on" size={24} color="#FFD700" />
+            <MaterialIcons name="monetization-on" size={22} color="#FFD700" />
           </TouchableOpacity>
 
           {/* State Selector */}
           <TouchableOpacity
             onPress={() => setShowStateModal(true)}
             style={styles.selectorButton}
+            testID="state-selector"
           >
             <Text style={styles.selectorText} numberOfLines={1}>
               {selectedState}
             </Text>
-            <MaterialIcons name="arrow-drop-down" size={20} color="#000" />
+            <MaterialIcons name="arrow-drop-down" size={18} color="#000" />
           </TouchableOpacity>
 
           {/* Language Selector */}
           <TouchableOpacity
             onPress={() => setShowLanguageModal(true)}
             style={styles.selectorButton}
+            testID="language-selector"
           >
-            <Text style={styles.selectorText}>
+            <Text style={styles.selectorText} numberOfLines={1}>
               {selectedLanguage.charAt(0).toUpperCase() + selectedLanguage.slice(1)}
             </Text>
-            <MaterialIcons name="arrow-drop-down" size={20} color="#000" />
-          </TouchableOpacity>
-
-          {/* Menu Icon */}
-          <TouchableOpacity
-            onPress={() => router.push('/admin')}
-            style={styles.iconButton}
-          >
-            <MaterialIcons name="more-vert" size={24} color="#000" />
+            <MaterialIcons name="arrow-drop-down" size={18} color="#000" />
           </TouchableOpacity>
         </View>
       </View>
@@ -239,12 +253,16 @@ export default function Home() {
         <FlatList
           data={mergeNewsWithAds()}
           renderItem={renderItem}
-          keyExtractor={(item, index) => `${item.type}-${index}`}
+          keyExtractor={(item, index) => `${item.type}-${item.data?.id || index}`}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#DC143C']} />
           }
           showsVerticalScrollIndicator={false}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={11}
+          removeClippedSubviews={true}
         />
       )}
 
@@ -376,39 +394,56 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#DC143C',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 10,
   },
-  logo: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    flex: 1,
-  },
-  headerActions: {
+  headerBottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
+    gap: 6,
   },
-  iconButton: {
+  logo: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    letterSpacing: 1,
+  },
+  menuButton: {
     padding: 4,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 20,
+  },
+  coinButton: {
+    padding: 6,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   selectorButton: {
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    maxWidth: 120,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 32,
   },
   selectorText: {
     fontSize: 12,
     color: '#000',
-    fontWeight: '500',
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
   },
   loadingContainer: {
     flex: 1,
@@ -428,6 +463,26 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     overflow: 'hidden',
+  },
+  adminNewsCard: {
+    borderWidth: 2,
+    borderColor: '#DC143C',
+  },
+  adminBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: '#DC143C',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+    zIndex: 10,
+  },
+  adminBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
   },
   newsImage: {
     width: '100%',

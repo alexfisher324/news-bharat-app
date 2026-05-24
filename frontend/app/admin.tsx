@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import axios from 'axios';
@@ -18,11 +19,22 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
+// Cross-platform alert that works on web AND native
+const showAlert = (title: string, message: string) => {
+  if (Platform.OS === 'web') {
+    window.alert(`${title}\n\n${message}`);
+  } else {
+    Alert.alert(title, message);
+  }
+};
+
 export default function Admin() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState<'ads' | 'news'>('ads');
+  const [loading, setLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Ad form
   const [adTitle, setAdTitle] = useState('');
@@ -38,7 +50,18 @@ export default function Admin() {
   const [newsLanguage, setNewsLanguage] = useState('english');
   const [newsState, setNewsState] = useState('National');
 
+  const showStatus = (type: 'success' | 'error', text: string) => {
+    setStatusMessage({ type, text });
+    setTimeout(() => setStatusMessage(null), 4000);
+  };
+
   const handleLogin = async () => {
+    if (!password) {
+      showStatus('error', 'Please enter password');
+      return;
+    }
+
+    setLoading(true);
     try {
       const response = await axios.post(`${BACKEND_URL}/api/admin/login`, {
         password: password,
@@ -46,17 +69,57 @@ export default function Admin() {
 
       if (response.data.success) {
         setIsAuthenticated(true);
-        Alert.alert('Success', 'Login successful!');
+        showStatus('success', 'Login successful!');
       }
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.detail || 'Invalid password');
+      console.error('Login error:', error);
+      showStatus('error', error.response?.data?.detail || 'Invalid password');
+    } finally {
+      setLoading(false);
     }
   };
 
+  // Cross-platform image picker
+  const pickImageWeb = (type: 'ad' | 'news') => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e: any) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64Image = reader.result as string;
+          if (type === 'ad') {
+            setAdMedia(base64Image);
+          } else {
+            setNewsImage(base64Image);
+          }
+          showStatus('success', 'Image uploaded!');
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+    input.click();
+  };
+
   const pickImage = async (type: 'ad' | 'news') => {
+    // Use web file input for web platform
+    if (Platform.OS === 'web') {
+      pickImageWeb(type);
+      return;
+    }
+
     try {
+      // Request permission first
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showStatus('error', 'Permission to access photos denied');
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [16, 9],
         quality: 0.7,
@@ -70,18 +133,21 @@ export default function Admin() {
         } else {
           setNewsImage(base64Image);
         }
+        showStatus('success', 'Image uploaded!');
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to pick image');
+    } catch (error: any) {
+      console.error('Image picker error:', error);
+      showStatus('error', 'Failed to pick image: ' + error.message);
     }
   };
 
   const handleCreateAd = async () => {
     if (!adTitle || !adMedia || !adPosition) {
-      Alert.alert('Error', 'Please fill all required fields');
+      showStatus('error', 'Please fill: Title, Position & Image');
       return;
     }
 
+    setLoading(true);
     try {
       const response = await axios.post(`${BACKEND_URL}/api/admin/ads`, {
         title: adTitle,
@@ -92,23 +158,27 @@ export default function Admin() {
       });
 
       if (response.data.success) {
-        Alert.alert('Success', 'Ad created successfully!');
+        showStatus('success', `Ad created at position ${adPosition}!`);
         setAdTitle('');
         setAdMedia('');
         setAdPosition('');
         setAdDuration('');
       }
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to create ad');
+      console.error('Create ad error:', error);
+      showStatus('error', error.response?.data?.detail || 'Failed to create ad');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleCreateNews = async () => {
     if (!newsTitle || !newsDescription || !newsContent) {
-      Alert.alert('Error', 'Please fill all required fields');
+      showStatus('error', 'Please fill Title, Description & Content');
       return;
     }
 
+    setLoading(true);
     try {
       const response = await axios.post(`${BACKEND_URL}/api/admin/news`, {
         title: newsTitle,
@@ -120,27 +190,31 @@ export default function Admin() {
       });
 
       if (response.data.success) {
-        Alert.alert('Success', 'News created successfully!');
+        showStatus('success', 'News created! It will appear on top of feed.');
         setNewsTitle('');
         setNewsDescription('');
         setNewsContent('');
         setNewsImage('');
-        setNewsLanguage('english');
-        setNewsState('National');
       }
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to create news');
+      console.error('Create news error:', error);
+      showStatus('error', error.response?.data?.detail || 'Failed to create news');
+    } finally {
+      setLoading(false);
     }
   };
 
   const triggerNewsFetch = async () => {
+    setLoading(true);
     try {
       const response = await axios.post(`${BACKEND_URL}/api/admin/trigger-fetch`);
       if (response.data.success) {
-        Alert.alert('Success', 'News fetch triggered! Please wait a few minutes.');
+        showStatus('success', 'News fetch triggered! Wait a few minutes.');
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to trigger news fetch');
+      showStatus('error', 'Failed to trigger news fetch');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -151,11 +225,14 @@ export default function Admin() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.loginContainer}>
-          <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.closeButton} onPress={() => router.back()} testID="close-login">
             <MaterialIcons name="close" size={24} color="#000" />
           </TouchableOpacity>
 
+          <MaterialIcons name="admin-panel-settings" size={64} color="#DC143C" />
           <Text style={styles.loginTitle}>Admin Login</Text>
+          <Text style={styles.loginSubtitle}>Enter password to manage news & ads</Text>
+
           <TextInput
             style={styles.input}
             placeholder="Enter Password"
@@ -163,9 +240,27 @@ export default function Admin() {
             value={password}
             onChangeText={setPassword}
             placeholderTextColor="#999"
+            testID="password-input"
+            onSubmitEditing={handleLogin}
           />
-          <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-            <Text style={styles.loginButtonText}>Login</Text>
+
+          {statusMessage && (
+            <View style={[styles.statusBanner, statusMessage.type === 'error' ? styles.errorBanner : styles.successBanner]}>
+              <Text style={styles.statusText}>{statusMessage.text}</Text>
+            </View>
+          )}
+
+          <TouchableOpacity 
+            style={[styles.loginButton, loading && styles.buttonDisabled]} 
+            onPress={handleLogin}
+            disabled={loading}
+            testID="login-button"
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <Text style={styles.loginButtonText}>Login</Text>
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -178,20 +273,33 @@ export default function Admin() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.back()} testID="back-button">
           <MaterialIcons name="arrow-back" size={24} color="#FFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Admin Panel</Text>
-        <TouchableOpacity onPress={triggerNewsFetch}>
+        <TouchableOpacity onPress={triggerNewsFetch} testID="refresh-button">
           <MaterialIcons name="refresh" size={24} color="#FFF" />
         </TouchableOpacity>
       </View>
+
+      {statusMessage && (
+        <View style={[styles.statusBanner, statusMessage.type === 'error' ? styles.errorBanner : styles.successBanner]}>
+          <MaterialIcons 
+            name={statusMessage.type === 'success' ? 'check-circle' : 'error'} 
+            size={20} 
+            color="#FFF" 
+          />
+          <Text style={styles.statusText}>{statusMessage.text}</Text>
+        </View>
+      )}
 
       <View style={styles.tabContainer}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'ads' && styles.activeTab]}
           onPress={() => setActiveTab('ads')}
+          testID="ads-tab"
         >
+          <MaterialIcons name="campaign" size={20} color={activeTab === 'ads' ? '#DC143C' : '#666'} />
           <Text style={[styles.tabText, activeTab === 'ads' && styles.activeTabText]}>
             Upload Ads
           </Text>
@@ -199,17 +307,20 @@ export default function Admin() {
         <TouchableOpacity
           style={[styles.tab, activeTab === 'news' && styles.activeTab]}
           onPress={() => setActiveTab('news')}
+          testID="news-tab"
         >
+          <MaterialIcons name="article" size={20} color={activeTab === 'news' ? '#DC143C' : '#666'} />
           <Text style={[styles.tabText, activeTab === 'news' && styles.activeTabText]}>
             Create News
           </Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {activeTab === 'ads' ? (
           <View style={styles.form}>
             <Text style={styles.formTitle}>Upload Advertisement</Text>
+            <Text style={styles.formSubtitle}>Ads appear after every 3 news items</Text>
 
             <Text style={styles.label}>Ad Title *</Text>
             <TextInput
@@ -218,43 +329,56 @@ export default function Admin() {
               value={adTitle}
               onChangeText={setAdTitle}
               placeholderTextColor="#999"
+              testID="ad-title-input"
             />
 
             <Text style={styles.label}>Position Number *</Text>
             <TextInput
               style={styles.input}
-              placeholder="Enter position (1, 2, 3...)"
+              placeholder="Enter position (1, 2, 3, 4...)"
               value={adPosition}
               onChangeText={setAdPosition}
               keyboardType="numeric"
               placeholderTextColor="#999"
+              testID="ad-position-input"
             />
 
-            <Text style={styles.label}>Duration (seconds)</Text>
+            <Text style={styles.label}>Duration in seconds (optional)</Text>
             <TextInput
               style={styles.input}
-              placeholder="Enter duration (optional)"
+              placeholder="e.g. 3600 for 1 hour"
               value={adDuration}
               onChangeText={setAdDuration}
               keyboardType="numeric"
               placeholderTextColor="#999"
+              testID="ad-duration-input"
             />
 
             <Text style={styles.label}>Ad Image *</Text>
-            <TouchableOpacity style={styles.imageButton} onPress={() => pickImage('ad')}>
+            <TouchableOpacity style={styles.imageButton} onPress={() => pickImage('ad')} testID="pick-ad-image">
               <MaterialIcons name="add-photo-alternate" size={24} color="#DC143C" />
-              <Text style={styles.imageButtonText}>Pick Image</Text>
+              <Text style={styles.imageButtonText}>{adMedia ? 'Change Image' : 'Pick Image'}</Text>
             </TouchableOpacity>
 
-            {adMedia && <Image source={{ uri: adMedia }} style={styles.previewImage} />}
+            {adMedia ? <Image source={{ uri: adMedia }} style={styles.previewImage} /> : null}
 
-            <TouchableOpacity style={styles.submitButton} onPress={handleCreateAd}>
-              <Text style={styles.submitButtonText}>Create Ad</Text>
+            <TouchableOpacity 
+              style={[styles.submitButton, loading && styles.buttonDisabled]} 
+              onPress={handleCreateAd}
+              disabled={loading}
+              testID="submit-ad-button"
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.submitButtonText}>Create Ad</Text>
+              )}
             </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.form}>
             <Text style={styles.formTitle}>Create News Article</Text>
+            <Text style={styles.formSubtitle}>Admin news appears on top of the feed</Text>
 
             <Text style={styles.label}>Title *</Text>
             <TextInput
@@ -263,6 +387,7 @@ export default function Admin() {
               value={newsTitle}
               onChangeText={setNewsTitle}
               placeholderTextColor="#999"
+              testID="news-title-input"
             />
 
             <Text style={styles.label}>Description *</Text>
@@ -274,6 +399,7 @@ export default function Admin() {
               multiline
               numberOfLines={3}
               placeholderTextColor="#999"
+              testID="news-description-input"
             />
 
             <Text style={styles.label}>Content *</Text>
@@ -285,6 +411,7 @@ export default function Admin() {
               multiline
               numberOfLines={5}
               placeholderTextColor="#999"
+              testID="news-content-input"
             />
 
             <Text style={styles.label}>Language</Text>
@@ -294,6 +421,7 @@ export default function Admin() {
               value={newsLanguage}
               onChangeText={setNewsLanguage}
               placeholderTextColor="#999"
+              testID="news-language-input"
             />
 
             <Text style={styles.label}>State</Text>
@@ -303,18 +431,28 @@ export default function Admin() {
               value={newsState}
               onChangeText={setNewsState}
               placeholderTextColor="#999"
+              testID="news-state-input"
             />
 
             <Text style={styles.label}>News Image (Optional)</Text>
-            <TouchableOpacity style={styles.imageButton} onPress={() => pickImage('news')}>
+            <TouchableOpacity style={styles.imageButton} onPress={() => pickImage('news')} testID="pick-news-image">
               <MaterialIcons name="add-photo-alternate" size={24} color="#DC143C" />
-              <Text style={styles.imageButtonText}>Pick Image</Text>
+              <Text style={styles.imageButtonText}>{newsImage ? 'Change Image' : 'Pick Image'}</Text>
             </TouchableOpacity>
 
-            {newsImage && <Image source={{ uri: newsImage }} style={styles.previewImage} />}
+            {newsImage ? <Image source={{ uri: newsImage }} style={styles.previewImage} /> : null}
 
-            <TouchableOpacity style={styles.submitButton} onPress={handleCreateNews}>
-              <Text style={styles.submitButtonText}>Create News</Text>
+            <TouchableOpacity 
+              style={[styles.submitButton, loading && styles.buttonDisabled]} 
+              onPress={handleCreateNews}
+              disabled={loading}
+              testID="submit-news-button"
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.submitButtonText}>Create News</Text>
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -339,12 +477,20 @@ const styles = StyleSheet.create({
     top: 48,
     right: 24,
     zIndex: 10,
+    padding: 8,
   },
   loginTitle: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#DC143C',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  loginSubtitle: {
+    fontSize: 14,
+    color: '#666',
     marginBottom: 32,
+    textAlign: 'center',
   },
   loginButton: {
     backgroundColor: '#DC143C',
@@ -352,11 +498,16 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 8,
     marginTop: 16,
+    minWidth: 200,
+    alignItems: 'center',
   },
   loginButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   header: {
     backgroundColor: '#DC143C',
@@ -372,6 +523,28 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
+  statusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 8,
+  },
+  successBanner: {
+    backgroundColor: '#10B981',
+  },
+  errorBanner: {
+    backgroundColor: '#EF4444',
+  },
+  statusText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
   tabContainer: {
     flexDirection: 'row',
     borderBottomWidth: 1,
@@ -381,13 +554,16 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 16,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
   },
   activeTab: {
     borderBottomWidth: 3,
     borderBottomColor: '#DC143C',
   },
   tabText: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#666',
   },
   activeTabText: {
@@ -404,7 +580,12 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
     color: '#000',
-    marginBottom: 24,
+    marginBottom: 4,
+  },
+  formSubtitle: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 16,
   },
   label: {
     fontSize: 14,
@@ -421,6 +602,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     color: '#000',
+    backgroundColor: '#FFF',
   },
   textArea: {
     minHeight: 100,
