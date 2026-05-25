@@ -655,10 +655,15 @@ async def startup_event():
         with open(env_path, 'a') as f:
             f.write(f'\nEMERGENT_LLM_KEY={EMERGENT_LLM_KEY}\n')
     
-    # Create indexes for translation cache (fast lookups)
+    # Create indexes for translation cache (fast lookups + auto-expire after 30 days)
     try:
         await db.translation_cache.create_index("cache_key", unique=True)
-        logger.info("Translation cache index ready")
+        # TTL index: auto-delete cache entries 30 days after created_at
+        await db.translation_cache.create_index(
+            "created_at",
+            expireAfterSeconds=30 * 24 * 60 * 60  # 30 days
+        )
+        logger.info("Translation cache indexes ready (unique key + 30-day TTL)")
     except Exception as e:
         logger.error(f"Index creation error: {e}")
     
