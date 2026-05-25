@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime, timedelta
 import aiohttp
 import asyncio
+import hashlib
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 import base64
@@ -118,10 +119,22 @@ class NewsResponse(BaseModel):
 
 # ===================== TRANSLATION SERVICE =====================
 async def translate_text(text: str, target_language: str) -> str:
-    """Translate text to target language using Gemini"""
-    if target_language == "english":
+    """Translate text to target language using Gemini, with MongoDB caching"""
+    if target_language == "english" or not text or not text.strip():
         return text
     
+    # Generate cache key (sha256 of text + target_language)
+    cache_key = hashlib.sha256(f"{text}|{target_language}".encode('utf-8')).hexdigest()
+    
+    # Check cache first
+    try:
+        cached = await db.translation_cache.find_one({"cache_key": cache_key}, {"_id": 0, "translated_text": 1})
+        if cached and cached.get("translated_text"):
+            return cached["translated_text"]
+    except Exception as e:
+        logger.error(f"Cache lookup error: {e}")
+    
+    # Cache miss → call Gemini
     try:
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
@@ -131,7 +144,21 @@ async def translate_text(text: str, target_language: str) -> str:
         
         message = UserMessage(text=text)
         response = await chat.send_message(message)
-        return response.strip()
+        translated = response.strip()
+        
+        # Store in cache (best-effort, don't fail if cache write errors)
+        try:
+            await db.translation_cache.insert_one({
+                "cache_key": cache_key,
+                "source_text": text[:500],  # Truncate source for storage
+                "target_language": target_language,
+                "translated_text": translated,
+                "created_at": datetime.utcnow()
+            })
+        except Exception as cache_err:
+            logger.error(f"Cache write error: {cache_err}")
+        
+        return translated
     except Exception as e:
         logger.error(f"Translation error: {e}")
         return text  # Return original if translation fails
@@ -526,6 +553,32 @@ async def trigger_news_fetch():
         logger.error(f"Error triggering fetch: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@api_router.get("/admin/cache/stats")
+async def cache_stats():
+    """Admin: View translation cache statistics"""
+    try:
+        total = await db.translation_cache.count_documents({})
+        by_lang = await db.translation_cache.aggregate([
+            {"$group": {"_id": "$target_language", "count": {"$sum": 1}}}
+        ]).to_list(20)
+        return {
+            "total_cached_translations": total,
+            "by_language": {item["_id"]: item["count"] for item in by_lang}
+        }
+    except Exception as e:
+        logger.error(f"Cache stats error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.delete("/admin/cache/clear")
+async def clear_cache():
+    """Admin: Clear translation cache"""
+    try:
+        result = await db.translation_cache.delete_many({})
+        return {"success": True, "deleted_count": result.deleted_count}
+    except Exception as e:
+        logger.error(f"Cache clear error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @api_router.get("/admin/news/list")
 async def list_all_news_admin():
     """Admin: List all news for management"""
@@ -601,6 +654,13 @@ async def startup_event():
     if 'EMERGENT_LLM_KEY' not in env_content:
         with open(env_path, 'a') as f:
             f.write(f'\nEMERGENT_LLM_KEY={EMERGENT_LLM_KEY}\n')
+    
+    # Create indexes for translation cache (fast lookups)
+    try:
+        await db.translation_cache.create_index("cache_key", unique=True)
+        logger.info("Translation cache index ready")
+    except Exception as e:
+        logger.error(f"Index creation error: {e}")
     
     # Seed initial news data
     news_count = await db.news.count_documents({})
