@@ -137,13 +137,15 @@ async def translate_text(text: str, target_language: str) -> str:
         return text  # Return original if translation fails
 
 # ===================== NEWS FETCHING SERVICE =====================
-async def fetch_news_from_gnews(language: str, state: str = "National", max_articles: int = 20) -> List[dict]:
+async def fetch_news_from_gnews(language: str, state: str = "National", max_articles: int = 20, query_override: str = None) -> List[dict]:
     """Fetch news from GNews API"""
     try:
         lang_code = LANGUAGE_CODES.get(language, "en")
         
-        # Determine query based on state
-        if state == "National":
+        # Determine query based on state or use override
+        if query_override:
+            query = query_override
+        elif state == "National":
             query = f"India"
         elif state == "International":
             query = "world"
@@ -191,13 +193,15 @@ async def fetch_news_from_gnews(language: str, state: str = "National", max_arti
         logger.error(f"Error fetching from GNews: {e}")
         return []
 
-async def fetch_news_from_newsapi(language: str, state: str = "National", max_articles: int = 20) -> List[dict]:
+async def fetch_news_from_newsapi(language: str, state: str = "National", max_articles: int = 20, query_override: str = None) -> List[dict]:
     """Fetch news from NewsAPI.org"""
     try:
         lang_code = LANGUAGE_CODES.get(language, "en")
         
-        # Determine query based on state
-        if state == "National":
+        # Determine query based on state or use override
+        if query_override:
+            query = query_override
+        elif state == "National":
             query = "India"
         elif state == "International":
             query = "world"
@@ -245,56 +249,155 @@ async def fetch_news_from_newsapi(language: str, state: str = "National", max_ar
         logger.error(f"Error fetching from NewsAPI: {e}")
         return []
 
+async def fetch_from_newsapi_top_headlines(language: str, state: str = "National", category: str = None, max_articles: int = 20) -> List[dict]:
+    """Fetch top headlines from NewsAPI.org (different from /everything endpoint)"""
+    try:
+        lang_code = LANGUAGE_CODES.get(language, "en")
+        
+        if state == "International":
+            url = f"https://newsapi.org/v2/top-headlines?language={lang_code}&pageSize={max_articles}&apiKey={NEWSAPI_KEY}"
+            if category:
+                url += f"&category={category}"
+        else:
+            # National or state-specific
+            url = f"https://newsapi.org/v2/top-headlines?country=in&pageSize={max_articles}&apiKey={NEWSAPI_KEY}"
+            if category:
+                url += f"&category={category}"
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    articles = data.get('articles', [])
+                    
+                    news_list = []
+                    for article in articles:
+                        image_base64 = None
+                        if article.get('urlToImage'):
+                            try:
+                                async with session.get(article['urlToImage'], timeout=aiohttp.ClientTimeout(total=10)) as img_response:
+                                    if img_response.status == 200:
+                                        img_data = await img_response.read()
+                                        image_base64 = f"data:image/jpeg;base64,{base64.b64encode(img_data).decode()}"
+                            except:
+                                pass
+                        
+                        news_item = {
+                            'title': article.get('title', ''),
+                            'description': article.get('description', '') or article.get('title', ''),
+                            'content': article.get('content', '') or article.get('description', '') or '',
+                            'imageUrl': image_base64,
+                            'source': article.get('source', {}).get('name', 'NewsAPI'),
+                            'publishedAt': article.get('publishedAt', datetime.utcnow().isoformat()),
+                            'state': state,
+                            'language': language
+                        }
+                        news_list.append(news_item)
+                    
+                    return news_list
+                else:
+                    logger.error(f"NewsAPI top-headlines error: {response.status}")
+                    return []
+    except Exception as e:
+        logger.error(f"Error fetching top-headlines: {e}")
+        return []
+
 async def fetch_and_store_news():
-    """Fetch news for all languages and states, then store in database"""
+    """Fetch news using NewsAPI top-headlines categories for 100+ diverse articles"""
     logger.info("Starting news fetch job...")
     
+    # Categories supported by NewsAPI top-headlines
+    CATEGORIES = ["general", "business", "entertainment", "health", "science", "sports", "technology"]
+    
+    # Additional query terms for NewsAPI /everything endpoint
+    NATIONAL_QUERIES = ["India politics", "Bollywood", "Indian economy", "India sports"]
+    INTERNATIONAL_QUERIES = ["world news", "global politics", "international affairs"]
+    
     try:
-        # Fetch for default languages and states
-        priority_languages = ["english", "hindi"]
-        priority_states = ["National", "International"]
+        total_stored = 0
         
-        for language in priority_languages:
-            for state in priority_states:
-                # Fetch from both APIs
-                gnews_articles = await fetch_news_from_gnews(language, state, 10)
-                newsapi_articles = await fetch_news_from_newsapi(language, state, 10)
-                
-                all_articles = gnews_articles + newsapi_articles
-                
-                # Store in database
-                for article in all_articles:
-                    try:
-                        # Translate if needed
-                        if language != "english":
-                            article['title'] = await translate_text(article['title'], language)
-                            article['description'] = await translate_text(article['description'], language)
-                        
-                        news_obj = News(
-                            title=article['title'],
-                            description=article['description'],
-                            content=article['content'],
-                            imageUrl=article.get('imageUrl'),
-                            state=article['state'],
-                            language=article['language'],
-                            source=article['source'],
-                            publishedAt=datetime.fromisoformat(article['publishedAt'].replace('Z', '+00:00'))
-                        )
-                        
-                        # Check if news already exists
-                        existing = await db.news.find_one({"title": news_obj.title})
-                        if not existing:
-                            await db.news.insert_one(news_obj.dict())
-                            logger.info(f"Stored news: {news_obj.title[:50]}...")
-                    except Exception as e:
-                        logger.error(f"Error storing news: {e}")
-                        continue
-                
-                await asyncio.sleep(2)  # Rate limiting
+        # === English National news ===
+        for category in CATEGORIES:
+            articles = await fetch_from_newsapi_top_headlines(
+                language="english", state="National", category=category, max_articles=20
+            )
+            total_stored += await _store_articles(articles, "english", translate=False)
+            await asyncio.sleep(0.5)
         
-        logger.info("News fetch job completed!")
+        for query in NATIONAL_QUERIES:
+            articles = await fetch_news_from_newsapi(
+                "english", "National", max_articles=20, query_override=query
+            )
+            total_stored += await _store_articles(articles, "english", translate=False)
+            await asyncio.sleep(0.5)
+        
+        logger.info(f"After English/National: stored {total_stored}")
+        
+        # === English International news ===
+        for category in CATEGORIES[:5]:  # Limit international categories
+            articles = await fetch_from_newsapi_top_headlines(
+                language="english", state="International", category=category, max_articles=20
+            )
+            total_stored += await _store_articles(articles, "english", translate=False)
+            await asyncio.sleep(0.5)
+        
+        for query in INTERNATIONAL_QUERIES:
+            articles = await fetch_news_from_newsapi(
+                "english", "International", max_articles=20, query_override=query
+            )
+            total_stored += await _store_articles(articles, "english", translate=False)
+            await asyncio.sleep(0.5)
+        
+        logger.info(f"After English/International: stored {total_stored}")
+        
+        # === Hindi news (fewer to avoid translation bottleneck) ===
+        # Fetch Hindi news without translation first (using Hindi-language sources)
+        for state in ["National", "International"]:
+            for category in CATEGORIES[:3]:
+                articles = await fetch_from_newsapi_top_headlines(
+                    language="hindi", state=state, category=category, max_articles=15
+                )
+                total_stored += await _store_articles(articles, "hindi", translate=False)
+                await asyncio.sleep(0.5)
+        
+        logger.info(f"News fetch job completed! Total new articles: {total_stored}")
     except Exception as e:
         logger.error(f"Error in fetch_and_store_news: {e}")
+
+async def _store_articles(articles: List[dict], language: str, translate: bool = False) -> int:
+    """Store articles in database, skip duplicates. Returns count stored."""
+    stored = 0
+    for article in articles:
+        try:
+            if not article.get('title') or not article.get('description'):
+                continue
+            
+            # Translate if requested
+            if translate and language != "english":
+                article['title'] = await translate_text(article['title'], language)
+                article['description'] = await translate_text(article['description'], language)
+            
+            news_obj = News(
+                title=article['title'],
+                description=article['description'],
+                content=article['content'],
+                imageUrl=article.get('imageUrl'),
+                state=article['state'],
+                language=article['language'],
+                source=article['source'],
+                publishedAt=datetime.fromisoformat(
+                    article['publishedAt'].replace('Z', '+00:00')
+                )
+            )
+            
+            existing = await db.news.find_one({"title": news_obj.title, "language": news_obj.language})
+            if not existing:
+                await db.news.insert_one(news_obj.dict())
+                stored += 1
+        except Exception as e:
+            logger.error(f"Error storing article: {e}")
+            continue
+    return stored
 
 async def cleanup_old_news():
     """Remove news older than 24 hours"""
