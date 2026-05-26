@@ -674,8 +674,16 @@ async def startup_event():
         await fetch_and_store_news()
     
     # Schedule jobs
-    # Fetch news every 6 hours
-    scheduler.add_job(fetch_and_store_news, 'interval', hours=6, id='fetch_news')
+    # Fetch news at fixed UTC hours: 00:00, 06:00, 12:00, 18:00 (every 6 hours)
+    # Using cron-style trigger ensures fetches happen at predictable times
+    # regardless of backend restarts
+    scheduler.add_job(
+        fetch_and_store_news,
+        'cron',
+        hour='0,6,12,18',
+        minute=0,
+        id='fetch_news'
+    )
     
     # Cleanup old news every hour
     scheduler.add_job(cleanup_old_news, 'interval', hours=1, id='cleanup_news')
