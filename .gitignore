@@ -80,3 +80,11 @@ memory/test_credentials.md
 
 # Mobile development
 android-sdk/
+.env
+.env.*
+*.env
+credentials.json
+*.key
+.credentials
+the-bharat.tar.gz
+frontend.tar.gz
