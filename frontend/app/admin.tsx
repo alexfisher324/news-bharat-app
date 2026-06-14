@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import axios from 'axios';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialIcons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -32,14 +33,16 @@ export default function Admin() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
-  const [activeTab, setActiveTab] = useState<'ads' | 'news' | 'manage'>('ads');
+  const [activeTab, setActiveTab] = useState<
+  'ads' | 'news' | 'shorts' | 'manage'
+>('ads');
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Manage content lists
   const [manageNewsList, setManageNewsList] = useState<any[]>([]);
   const [manageAdsList, setManageAdsList] = useState<any[]>([]);
-  const [manageSubTab, setManageSubTab] = useState<'news' | 'ads'>('news');
+  const [manageSubTab, setManageSubTab] = useState<'news' | 'ads' | 'shorts'>('news');
 
   // Ad form
   const [adTitle, setAdTitle] = useState('');
@@ -47,6 +50,11 @@ export default function Admin() {
   const [adPosition, setAdPosition] = useState('');
   const [adDuration, setAdDuration] = useState('');
 
+  // Shorts video
+  const [shortTitle, setShortTitle] = useState('');
+const [shortDescription, setShortDescription] = useState('');
+const [shortVideo, setShortVideo] = useState<any>(null);
+const [manageShortsList, setManageShortsList] = useState<any[]>([]);
   // News form
   const [newsTitle, setNewsTitle] = useState('');
   const [newsDescription, setNewsDescription] = useState('');
@@ -226,14 +234,16 @@ export default function Admin() {
   const loadManageData = async () => {
     setLoading(true);
     try {
-      const [newsRes, adsRes] = await Promise.all([
+      const [newsRes, adsRes, shortsRes] = await Promise.all([
         axios.get(`${BACKEND_URL}/api/admin/news/list`),
         axios.get(`${BACKEND_URL}/api/admin/ads/list`),
+        axios.get(`${BACKEND_URL}/api/shorts`),
       ]);
       setManageNewsList(newsRes.data.news || []);
       setManageAdsList(adsRes.data.ads || []);
+      setManageShortsList(shortsRes.data.shorts || []);
     } catch (error: any) {
-      showStatus('error', 'Failed to load content');
+      showStatus('error', 'Failed to load content: ' + (error.response?.data?.detail || error.message));
     } finally {
       setLoading(false);
     }
@@ -278,6 +288,110 @@ export default function Admin() {
     }
   };
 
+  // Admin Video Shorts functionality
+  const pickVideo = async () => {
+  try {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: 'video/*',
+      copyToCacheDirectory: true,
+    });
+
+    if (!result.canceled) {
+      setShortVideo(result.assets[0]);
+      showStatus('success', 'Video selected');
+    }
+  } catch (error) {
+    showStatus('error', 'Failed to pick video');
+  }
+};
+
+const handleUploadShort = async () => {
+  if (!shortTitle || !shortVideo) {
+    showStatus('error', 'Title and video are required');
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    const formData = new FormData();
+
+    formData.append('title', shortTitle);
+    formData.append('description', shortDescription);
+
+    formData.append('video', {
+      uri: shortVideo.uri,
+      name: shortVideo.name,
+      type: shortVideo.mimeType || 'video/mp4',
+    } as any);
+
+    const response = await axios.post(
+      `${BACKEND_URL}/api/admin/shorts`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+
+    if (response.data.success) {
+      showStatus('success', 'Short uploaded successfully');
+      setManageShortsList((prev) => [
+        {
+          id: response.data.id,
+          title: shortTitle,
+          description: shortDescription,
+          createdAt: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
+      setShortTitle('');
+      setShortDescription('');
+      setShortVideo(null);
+    }
+  } catch (error: any) {
+    console.error('Upload short error:', error);
+    showStatus(
+      'error',
+      error.response?.data?.detail || 'Failed to upload short'
+    );
+  } finally {
+    setLoading(false);
+  }
+};
+
+const deleteShortItem = async (
+  id: string,
+  title: string
+) => {
+  const ok = await confirmDelete(
+    `Delete short "${title}"?`
+  );
+
+  if (!ok) return;
+
+  try {
+    await axios.delete(
+      `${BACKEND_URL}/api/admin/shorts/${id}`
+    );
+
+    showStatus(
+      'success',
+      'Short deleted successfully'
+    );
+
+    setManageShortsList((prev) =>
+      prev.filter((s) => s.id !== id)
+    );
+  } catch (error) {
+    showStatus(
+      'error',
+      'Failed to delete short'
+    );
+  }
+};
+
   if (!isAuthenticated) {
     return (
       <KeyboardAvoidingView
@@ -289,9 +403,9 @@ export default function Admin() {
             <MaterialIcons name="close" size={24} color="#000" />
           </TouchableOpacity>
 
-          <MaterialIcons name="admin-panel-settings" size={64} color="#DC143C" />
-          <Text style={styles.loginTitle}>Admin Login</Text>
-          <Text style={styles.loginSubtitle}>Enter password to manage news & ads</Text>
+          {/* <MaterialIcons name="admin-panel-settings" size={64} color="#DC143C" /> */}
+          {/* <Text style={styles.loginTitle}>Admin Login</Text>
+          <Text style={styles.loginSubtitle}>Enter password to manage news & ads</Text> */}
 
           <TextInput
             style={styles.input}
@@ -372,6 +486,16 @@ export default function Admin() {
           <MaterialIcons name="article" size={18} color={activeTab === 'news' ? '#DC143C' : '#666'} />
           <Text style={[styles.tabText, activeTab === 'news' && styles.activeTabText]}>
             News
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'shorts' && styles.activeTab]}
+          onPress={() => setActiveTab('shorts')}
+          testID="shorts-tab"
+        >
+          <MaterialIcons name="video-library" size={18} color={activeTab === 'shorts' ? '#DC143C' : '#666'} />
+          <Text style={[styles.tabText, activeTab === 'shorts' && styles.activeTabText]}>
+            Shorts
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -558,6 +682,24 @@ export default function Admin() {
                   Ads ({manageAdsList.length})
                 </Text>
               </TouchableOpacity>
+              <TouchableOpacity
+  style={[
+    styles.subTab,
+    manageSubTab === 'shorts' &&
+      styles.subTabActive,
+  ]}
+  onPress={() => setManageSubTab('shorts')}
+>
+  <Text
+    style={[
+      styles.subTabText,
+      manageSubTab === 'shorts' &&
+        styles.subTabTextActive,
+    ]}
+  >
+    Shorts ({manageShortsList.length})
+  </Text>
+</TouchableOpacity>
             </View>
 
             <TouchableOpacity style={styles.refreshLink} onPress={loadManageData} testID="reload-manage">
@@ -626,8 +768,112 @@ export default function Admin() {
                 ))}
               </View>
             )}
+            {manageSubTab === 'shorts' && (
+  <View style={{ marginTop: 8 }}>
+    {manageShortsList.map((item) => (
+      <View
+        key={item.id}
+        style={styles.manageItem}
+      >
+        <View style={styles.manageItemContent}>
+          <View style={styles.slotTag}>
+            <Text style={styles.slotTagText}>
+              VIDEO
+            </Text>
+          </View>
+
+          <Text
+            style={styles.manageItemTitle}
+          >
+            {item.title}
+          </Text>
+
+          <Text
+            style={styles.manageItemMeta}
+          >
+            {new Date(
+              item.createdAt
+            ).toLocaleDateString()}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() =>
+            deleteShortItem(
+              item.id,
+              item.title
+            )
+          }
+        >
+          <MaterialIcons
+            name="delete"
+            size={22}
+            color="#FFF"
+          />
+        </TouchableOpacity>
+      </View>
+    ))}
+  </View>
+)}
           </View>
         )}
+
+        {activeTab === 'shorts' && (
+  <View style={styles.form}>
+    <Text style={styles.formTitle}>Upload Short Video</Text>
+
+    <Text style={styles.label}>Title *</Text>
+    <TextInput
+      style={styles.input}
+      value={shortTitle}
+      onChangeText={setShortTitle}
+      placeholder="Enter title"
+    />
+
+    <Text style={styles.label}>Description</Text>
+    <TextInput
+      style={[styles.input, styles.textArea]}
+      multiline
+      value={shortDescription}
+      onChangeText={setShortDescription}
+      placeholder="Description"
+    />
+
+    <Text style={styles.label}>Video *</Text>
+
+    <TouchableOpacity
+      style={styles.imageButton}
+      onPress={pickVideo}
+    >
+      <MaterialIcons
+        name="video-library"
+        size={24}
+        color="#DC143C"
+      />
+
+      <Text style={styles.imageButtonText}>
+        {shortVideo
+          ? shortVideo.name
+          : 'Select Video'}
+      </Text>
+    </TouchableOpacity>
+
+    <TouchableOpacity
+      style={styles.submitButton}
+      onPress={handleUploadShort}
+      disabled={loading}
+    >
+      {loading ? (
+        <ActivityIndicator color="#FFFFFF" />
+      ) : (
+        <Text style={styles.submitButtonText}>
+          Upload Short
+        </Text>
+      )}
+    </TouchableOpacity>
+  </View>
+)}
       </ScrollView>
     </KeyboardAvoidingView>
   );
