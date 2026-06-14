@@ -139,7 +139,7 @@ backend:
     status_history:
       - working: true
         agent: "testing"
-        comment: "POST /api/admin/login tested successfully with correct password 'sunil@123'. Returns success=true and message='Login successful'. Status code 200."
+        comment: "POST /api/admin/login tested successfully with correct password 'sunilk@12295'. Returns success=true and message='Login successful'. Status code 200."
 
   - task: "Admin Login Failure"
     implemented: true

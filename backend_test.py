@@ -105,7 +105,7 @@ def test_admin_login_success():
     
     try:
         url = f"{BACKEND_URL}/admin/login"
-        payload = {"password": "sunil@123"}
+        payload = {"password": "sunilk@12295"}
         print(f"Request URL: {url}")
         print(f"Payload: {payload}")
         
