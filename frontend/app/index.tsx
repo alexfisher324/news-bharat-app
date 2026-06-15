@@ -14,6 +14,7 @@ import {
   RefreshControl,
   SafeAreaView,
   TextInput,
+  Alert,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -183,12 +184,12 @@ export default function Home() {
       const response = await axios.get(
         `${BACKEND_URL}/api/news?language=${capitalizedLanguage}&state=${selectedState}&limit=200`
       );
-      console.log('API URL:', `language=${capitalizedLanguage}&state=${selectedState}&limit=200`);
-      console.log('Fetched news:', response.data.news);
       setNews(response.data.news || []);
-    } catch (error) {
-      console.error('Error fetching news:', error);
-    } finally {
+    } catch (error: any) {
+  console.log('NEWS ERROR');
+  console.log(error?.response?.data);
+  console.log(error?.message);
+} finally {
       setLoading(false);
     } 
   };
@@ -202,32 +203,123 @@ export default function Home() {
     }
   };
 
-  const fetchShorts = async () => {
-    try {
-      setIsFetchingShorts(true);
-      const response = await axios.get(`${BACKEND_URL}/api/shorts?limit=20`);
-      const fetchedShorts = (response.data.shorts || []).map((short: any, index: number) => ({
-        id: short.id || `short-${index}`,
-        title: short.title || 'Video Highlight',
-        description: short.description || '',
-        duration: short.duration || 'Short Highlight',
-        state: short.state || 'National',
-        videoUrl: short.videoUrl || '',
-        thumbnail: short.thumbnail || undefined,
-      }));
-      if (fetchedShorts.length > 0) {
-        setVideoReels(fetchedShorts);
-      } else {
-        setVideoReels(dummyVideoReels);
-      }
-    } catch (error) {
-      console.error('Error fetching shorts:', error);
-      setVideoReels(dummyVideoReels);
-    } finally {
-      setIsFetchingShorts(false);
-    }
-  };
+//   const fetchShorts = async () => {
+//   try {
+//     setIsFetchingShorts(true);
+// Alert.alert("FETCH SHORTS", "CALLED");
 
+//     const url = `${BACKEND_URL}/api/shorts?limit=20`;
+//     console.log("SHORTS URL:", url);
+
+//     const response = await axios.get(url);
+
+//     Alert.alert(
+//       "SHORTS",
+//       `Count: ${response.data?.shorts?.length || 0}`
+//     );
+
+//     console.log("SHORTS RESPONSE:", JSON.stringify(response.data));
+
+//     const fetchedShorts = (response.data.shorts || []).map((short: any, index: number) => ({
+//       id: short.id || `short-${index}`,
+//       title: short.title || 'Video Highlight',
+//       description: short.description || '',
+//       duration: short.duration || 'Short Highlight',
+//       state: short.state || 'National',
+//       videoUrl: short.videoUrl || '',
+//       thumbnail: short.thumbnail || undefined,
+//     }));
+
+//     console.log("SHORTS COUNT:", fetchedShorts.length);
+
+//     if (fetchedShorts.length > 0) {
+//       setVideoReels(fetchedShorts);
+//     } else {
+//       console.log("USING DUMMY SHORTS");
+//       setVideoReels(dummyVideoReels);
+//     }
+//   } catch (error: any) {
+//      console.log("ERROR", JSON.stringify(error));
+//   Alert.alert(
+//     "API ERROR",
+//     error?.message || "Unknown Error"
+//   );
+//     setVideoReels(dummyVideoReels);
+//   } finally {
+//     setIsFetchingShorts(false);
+//   }
+// };
+
+const fetchShorts = async () => {
+  try {
+    setIsFetchingShorts(true);
+
+    Alert.alert("FETCH SHORTS", "CALLED");
+
+    const url = `${BACKEND_URL}/api/shorts?limit=20`;
+
+    console.log("SHORTS URL:", url);
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+    });
+
+    console.log("STATUS:", response.status);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    Alert.alert(
+      "SHORTS SUCCESS",
+      `Count: ${data?.shorts?.length || 0}`
+    );
+
+    console.log("SHORTS RESPONSE:", JSON.stringify(data));
+
+    const fetchedShorts = (data.shorts || []).map(
+      (short: any, index: number) => ({
+        id: short.id || `short-${index}`,
+        title: short.title || "Video Highlight",
+        description: short.description || "",
+        duration: short.duration || "Short Highlight",
+        state: short.state || "National",
+        videoUrl: short.videoUrl || "",
+        thumbnail: short.thumbnail || undefined,
+      })
+    );
+
+    console.log("SHORTS COUNT:", fetchedShorts.length);
+
+    if (fetchedShorts.length > 0) {
+      setVideoReels(fetchedShorts);
+    } else {
+      console.log("USING DUMMY SHORTS");
+      Alert.alert("NO SHORTS", "Using dummy data");
+      setVideoReels(dummyVideoReels);
+    }
+  } catch (error: any) {
+    console.log("FETCH ERROR:", error);
+
+    Alert.alert(
+      "FETCH ERROR",
+      JSON.stringify({
+        message: error?.message,
+        name: error?.name,
+      })
+    );
+
+    setVideoReels(dummyVideoReels);
+  } finally {
+    setIsFetchingShorts(false);
+  }
+};
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchNews();
@@ -359,6 +451,7 @@ export default function Home() {
       <View style={styles.header}>
         {/* Top Row: Logo + 3-dot Menu */}
         <View style={styles.headerTopRow}>
+          
           <Text style={styles.logo}>The BHARAT Evolution</Text>
            {/* Bottom Row: Coin Icon (visible on Video tab) */}
        
