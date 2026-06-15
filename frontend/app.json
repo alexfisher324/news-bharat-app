@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "frontend",
+    "name": "The BHARAT Evolution",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,31 +12,36 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.bharat.evolution",
+      "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000"
-      },
-      "edgeToEdgeEnabled": true
+        "backgroundColor": "#000000"
+      }
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000"
+          "backgroundColor": "#000000"
         }
-      ]
+      ],
+      "expo-font"
     ],
-    "experiments": {
-      "typedRoutes": true
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7b9aa24d-4e28-4880-aa65-cc325c525d51"
+      }
     }
   }
 }

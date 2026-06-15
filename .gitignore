@@ -88,3 +88,5 @@ credentials.json
 .credentials
 the-bharat.tar.gz
 frontend.tar.gz
+
+backend/firebase-key.json:1
