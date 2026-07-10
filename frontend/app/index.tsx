@@ -22,6 +22,7 @@ import axios from 'axios';
 import { Video, ResizeMode } from 'expo-av';
 import { useRouter, useFocusEffect } from 'expo-router';
 
+
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 interface NewsItem {
@@ -126,6 +127,7 @@ export default function Home() {
     'Lakshadweep',
     'Puducherry',
   ];
+  
 
   const dummyVideoReels: VideoReel[] = [
     {
@@ -182,7 +184,7 @@ export default function Home() {
       setLoading(true);
       const capitalizedLanguage = selectedLanguage.charAt(0).toUpperCase() + selectedLanguage.slice(1);
       const response = await axios.get(
-        `${BACKEND_URL}/api/news?language=${capitalizedLanguage}&state=${selectedState}&limit=200`
+        `${BACKEND_URL}/api/news`
       );
       setNews(response.data.news || []);
     } catch (error: any) {
@@ -203,59 +205,10 @@ export default function Home() {
     }
   };
 
-//   const fetchShorts = async () => {
-//   try {
-//     setIsFetchingShorts(true);
-// Alert.alert("FETCH SHORTS", "CALLED");
-
-//     const url = `${BACKEND_URL}/api/shorts?limit=20`;
-//     console.log("SHORTS URL:", url);
-
-//     const response = await axios.get(url);
-
-//     Alert.alert(
-//       "SHORTS",
-//       `Count: ${response.data?.shorts?.length || 0}`
-//     );
-
-//     console.log("SHORTS RESPONSE:", JSON.stringify(response.data));
-
-//     const fetchedShorts = (response.data.shorts || []).map((short: any, index: number) => ({
-//       id: short.id || `short-${index}`,
-//       title: short.title || 'Video Highlight',
-//       description: short.description || '',
-//       duration: short.duration || 'Short Highlight',
-//       state: short.state || 'National',
-//       videoUrl: short.videoUrl || '',
-//       thumbnail: short.thumbnail || undefined,
-//     }));
-
-//     console.log("SHORTS COUNT:", fetchedShorts.length);
-
-//     if (fetchedShorts.length > 0) {
-//       setVideoReels(fetchedShorts);
-//     } else {
-//       console.log("USING DUMMY SHORTS");
-//       setVideoReels(dummyVideoReels);
-//     }
-//   } catch (error: any) {
-//      console.log("ERROR", JSON.stringify(error));
-//   Alert.alert(
-//     "API ERROR",
-//     error?.message || "Unknown Error"
-//   );
-//     setVideoReels(dummyVideoReels);
-//   } finally {
-//     setIsFetchingShorts(false);
-//   }
-// };
 
 const fetchShorts = async () => {
   try {
     setIsFetchingShorts(true);
-
-    Alert.alert("FETCH SHORTS", "CALLED");
-
     const url = `${BACKEND_URL}/api/shorts?limit=20`;
 
     console.log("SHORTS URL:", url);
@@ -275,11 +228,6 @@ const fetchShorts = async () => {
     }
 
     const data = await response.json();
-
-    Alert.alert(
-      "SHORTS SUCCESS",
-      `Count: ${data?.shorts?.length || 0}`
-    );
 
     console.log("SHORTS RESPONSE:", JSON.stringify(data));
 
@@ -301,19 +249,10 @@ const fetchShorts = async () => {
       setVideoReels(fetchedShorts);
     } else {
       console.log("USING DUMMY SHORTS");
-      Alert.alert("NO SHORTS", "Using dummy data");
       setVideoReels(dummyVideoReels);
     }
   } catch (error: any) {
     console.log("FETCH ERROR:", error);
-
-    Alert.alert(
-      "FETCH ERROR",
-      JSON.stringify({
-        message: error?.message,
-        name: error?.name,
-      })
-    );
 
     setVideoReels(dummyVideoReels);
   } finally {
@@ -464,12 +403,19 @@ const fetchShorts = async () => {
               <MaterialIcons name="monetization-on" size={22} color="#FFD700" />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
+          {/* <TouchableOpacity
             onPress={() => router.push('/admin')}
             style={styles.menuButton}
             testID="admin-menu-button"
           >
             <MaterialIcons name="more-vert" size={28} color="#FFFFFF" />
+          </TouchableOpacity> */}
+           <TouchableOpacity
+            onPress={() => router.push('/contact')}
+            style={styles.menuButton}
+            testID="contact-menu-button"
+          >
+            <MaterialIcons name="support-agent" size={28} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
 
@@ -510,157 +456,196 @@ const fetchShorts = async () => {
           }}
         >
           <FlatList
-            data={videoReels}
-            pagingEnabled
-            snapToAlignment="start"
-            decelerationRate="fast"
-            snapToInterval={videoListHeight || undefined}
-            showsVerticalScrollIndicator={false}
-            keyExtractor={(item) => item.id}
-            initialNumToRender={2}
-            maxToRenderPerBatch={2}
-            windowSize={3}
-            removeClippedSubviews={false}
-            onScrollBeginDrag={() => {
-              Animated.timing(scrollOpacity, {
-                toValue: 0.75,
-                duration: 120,
-                useNativeDriver: true,
-              }).start();
-              setShowPlaybackControls(false);
-            }}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor="#DC143C"
-                colors={['#DC143C']}
-              />
-            }
-            onMomentumScrollEnd={(event) => {
-              Animated.timing(scrollOpacity, {
-                toValue: 1,
-                duration: 180,
-                useNativeDriver: true,
-              }).start();
-              const contentOffsetY = event.nativeEvent.contentOffset.y;
-              const newIndex = Math.round(contentOffsetY / event.nativeEvent.layoutMeasurement.height);
-              setCurrentVideoIndex(newIndex);
-              setShowPlaybackControls(false);
-            }}
-            renderItem={({ item, index }) => (
-              <Pressable
-                style={[styles.reelFullScreen, videoListHeight ? { height: videoListHeight } : {}]}
-                onPress={() => {
-                  setIsVideoPlaying((prev) => !prev);
-                  showPlaybackControlsTemporarily(true);
-                }}
-              >
-                {/* Video background with preloaded next reels */}
-                {item.videoUrl ? (
-                  <Video
-                    ref={(ref) => {
-                      videoRefs.current[index] = ref;
-                    }}
-                    source={{ uri: item.videoUrl }}
-                    style={styles.videoBackground}
-                    resizeMode={ResizeMode.COVER}
-                    shouldPlay={index === currentVideoIndex && isVideoPlaying}
-                    isLooping
-                    useNativeControls={false}
-                    posterSource={item.thumbnail ? { uri: item.thumbnail } : undefined}
-                    onLoadStart={() => {
-                      setVideoLoadingMap((prev) => ({ ...prev, [item.id]: true }));
-                    }}
-                    onReadyForDisplay={() => {
-                      setVideoLoadingMap((prev) => ({ ...prev, [item.id]: false }));
-                    }}
-                    onPlaybackStatusUpdate={(status) => {
-                      // Narrow the union type: AVPlaybackStatus may be an error object
-                      if (status && 'isLoaded' in status) {
-                        if (status.isLoaded) {
-                          const loaded: any = status;
-                          setVideoLoadingMap((prev) => ({ ...prev, [item.id]: !!loaded.isBuffering }));
-                        } else {
-                          setVideoLoadingMap((prev) => ({ ...prev, [item.id]: false }));
-                        }
-                      }
-                    }}
-                    onError={(error) => {
-                      console.error('Video playback error:', error);
-                      setVideoLoadingMap((prev) => ({ ...prev, [item.id]: false }));
-                    }}
-                  />
-                ) : (
-                  <Image
-                    source={{ uri: item.thumbnail }}
-                    style={styles.videoBackground}
-                  />
-                )}
+  data={videoReels}
+  keyExtractor={(item) => item.id}
+  showsVerticalScrollIndicator={false}
+  initialNumToRender={2}
+  maxToRenderPerBatch={2}
+  windowSize={3}
+  removeClippedSubviews={false}
+  pagingEnabled={false}
+  snapToInterval={videoListHeight}
+  snapToAlignment="start"
+  decelerationRate="fast"
+  disableIntervalMomentum={true}
+  bounces={false}
+  getItemLayout={(data, index) => ({
+    length: videoListHeight,
+    offset: videoListHeight * index,
+    index,
+  })}
+  refreshControl={
+    <RefreshControl
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      tintColor="#DC143C"
+      colors={['#DC143C']}
+    />
+  }
+  onScrollBeginDrag={() => {
+    Animated.timing(scrollOpacity, {
+      toValue: 0.75,
+      duration: 120,
+      useNativeDriver: true,
+    }).start();
 
-                {/* Loading indicator while this video's loading/buffering */}
-                {item.videoUrl && videoLoadingMap[item.id] && (
-                  <View style={styles.loadingOverlay} pointerEvents="none">
-                    <ActivityIndicator size="large" color="#FFFFFF" style={styles.loadingSpinner} />
-                  </View>
-                )}
+    setShowPlaybackControls(false);
+  }}
+  onMomentumScrollEnd={(event) => {
+    Animated.timing(scrollOpacity, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
 
-                {/* Dark Overlay for Transparency */}
-                <View style={styles.videoOverlay} />
+    const offsetY = event.nativeEvent.contentOffset.y;
+    const index = Math.round(offsetY / videoListHeight);
 
-                {item.videoUrl && showPlaybackControls && (
-                  <View style={styles.playButtonOverlay}>
-                    <MaterialIcons
-                      name={isVideoPlaying && index === currentVideoIndex ? 'pause' : 'play-arrow'}
-                      size={42}
-                      color="#FFFFFF"
-                    />
-                  </View>
-                )}
+    setCurrentVideoIndex(index);
+    setShowPlaybackControls(false);
+  }}
+  onViewableItemsChanged={onViewableItemsChanged.current}
+  viewabilityConfig={{
+    itemVisiblePercentThreshold: 80,
+  }}
+  renderItem={({ item, index }) => (
+    <Pressable
+      style={[
+        styles.reelFullScreen,
+        {
+          height: videoListHeight,
+        },
+      ]}
+      onPress={() => {
+        setIsVideoPlaying((prev) => !prev);
+        showPlaybackControlsTemporarily(true);
+      }}
+    >
+      {item.videoUrl ? (
+        <Video
+          ref={(ref) => {
+            videoRefs.current[index] = ref;
+          }}
+          source={{ uri: item.videoUrl }}
+          style={styles.videoBackground}
+          resizeMode={ResizeMode.COVER}
+          shouldPlay={
+            index === currentVideoIndex &&
+            isVideoPlaying
+          }
+          isLooping
+          useNativeControls={false}
+          posterSource={
+            item.thumbnail
+              ? { uri: item.thumbnail }
+              : undefined
+          }
+          onLoadStart={() => {
+  setVideoLoadingMap((prev) => ({
+    ...prev,
+    [item.id]: true,
+  }));
+}}
 
-                <View style={styles.videoProgressBarContainer}>
-                  <View
-                    style={[
-                      styles.videoProgressBarFill,
-                      { width: `${((currentVideoIndex + 1) / Math.max(videoReels.length, 1)) * 100}%` },
-                    ]}
-                  />
-                </View>
+onLoad={() => {
+  setVideoLoadingMap((prev) => ({
+    ...prev,
+    [item.id]: false,
+  }));
+}}
 
-              {/* Content Overlay */}
-              {/* <View style={styles.reelContentStack}>
-                <View style={styles.contentWrapper}>
-                  <Animated.View style={[styles.reelInfoCardFloating, { opacity: scrollOpacity }]}> 
-                    <TouchableOpacity style={styles.reelHighlightButton}>
-                      <MaterialIcons name="play-circle-fill" size={18} color="#FFFFFF" />
-                      <Text style={styles.reelHighlightText}>REEL HIGHLIGHT</Text>
-                    </TouchableOpacity>
+onReadyForDisplay={() => {
+  setVideoLoadingMap((prev) => ({
+    ...prev,
+    [item.id]: false,
+  }));
+}}
+          onPlaybackStatusUpdate={(status) => {
+  if (!status.isLoaded) return;
 
-                    <Text style={styles.reelTitle}>{item.title}</Text>
+  const showLoader =
+    status.isBuffering &&
+    !status.isPlaying;
 
-                    <View style={styles.reelMeta}>
-                      <Text style={styles.reelDuration}>{item.duration}</Text>
-                      <Text style={styles.reelDot}>•</Text>
-                      <Text style={styles.reelState}>State: {item.state}</Text>
-                    </View>
+  setVideoLoadingMap((prev) => ({
+    ...prev,
+    [item.id]: showLoader,
+  }));
+}}
+          onError={(error) => {
+            console.log(error);
+            setVideoLoadingMap((prev) => ({
+              ...prev,
+              [item.id]: false,
+            }));
+          }}
+        />
+      ) : (
+        <Image
+          source={{ uri: item.thumbnail }}
+          style={styles.videoBackground}
+        />
+      )}
 
-                    <Text style={styles.reelDescription}>{item.description}</Text>
-
-                    <Text style={styles.swipeHint}>Swipe up or down to browse reels</Text>
-                  </Animated.View>
-                </View>
-              </View> */}
-
-              <View style={styles.pageIndicatorOverlay}>
-                <MaterialIcons name="arrow-upward" size={18} color="#FFFFFF" style={styles.pageArrow} />
-                <Text style={styles.pageNumber}>{index + 1}/{videoReels.length}</Text>
-                <MaterialIcons name="arrow-downward" size={18} color="#FFFFFF" style={styles.pageArrow} />
-              </View>
-            </Pressable>
-          )}
-            onViewableItemsChanged={onViewableItemsChanged.current}
-            viewabilityConfig={viewabilityConfig.current}
+      {item.videoUrl && videoLoadingMap[item.id] && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator
+            size="large"
+            color="#FFFFFF"
           />
+        </View>
+      )}
+
+      <View style={styles.videoOverlay} />
+
+      {item.videoUrl && showPlaybackControls && (
+        <View style={styles.playButtonOverlay}>
+          <MaterialIcons
+            name={
+              isVideoPlaying &&
+              index === currentVideoIndex
+                ? 'pause'
+                : 'play-arrow'
+            }
+            size={42}
+            color="#FFFFFF"
+          />
+        </View>
+      )}
+
+      <View style={styles.videoProgressBarContainer}>
+        <View
+          style={[
+            styles.videoProgressBarFill,
+            {
+              width: `${
+                ((currentVideoIndex + 1) /
+                  Math.max(videoReels.length, 1)) *
+                100
+              }%`,
+            },
+          ]}
+        />
+      </View>
+
+      <View style={styles.pageIndicatorOverlay}>
+        <MaterialIcons
+          name="arrow-upward"
+          size={18}
+          color="#FFFFFF"
+        />
+        <Text style={styles.pageNumber}>
+          {index + 1}/{videoReels.length}
+        </Text>
+        <MaterialIcons
+          name="arrow-downward"
+          size={18}
+          color="#FFFFFF"
+        />
+      </View>
+    </Pressable>
+  )}
+/>
         </View>
       ) : (
         // E-PAPER ARTICLES TAB
@@ -671,69 +656,69 @@ const fetchShorts = async () => {
             </View>
           ) : (
             <FlatList
-              ListHeaderComponent={
-                <View style={styles.filtersContainer}>
-                  {/* Language Platform Section */}
-                  <View style={styles.filterSection}>
-                    <Text style={styles.filterTitle}>Language Platform</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.filterButtons}
-                    >
-                      {languages.map((lang) => (
-                        <TouchableOpacity
-                          key={lang}
-                          style={[
-                            styles.filterButton,
-                            selectedLanguage === lang && styles.filterButtonActive,
-                          ]}
-                          onPress={() => setSelectedLanguage(lang)}
-                        >
-                          <Text
-                            style={[
-                              styles.filterButtonText,
-                              selectedLanguage === lang && styles.filterButtonTextActive,
-                            ]}
-                          >
-                            {lang.charAt(0).toUpperCase() + lang.slice(1)}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
+              // ListHeaderComponent={
+              //   <View style={styles.filtersContainer}>
+              //     {/* Language Platform Section */}
+              //     <View style={styles.filterSection}>
+              //       <Text style={styles.filterTitle}>Language Platform</Text>
+              //       <ScrollView
+              //         horizontal
+              //         showsHorizontalScrollIndicator={false}
+              //         style={styles.filterButtons}
+              //       >
+              //         {languages.map((lang) => (
+              //           <TouchableOpacity
+              //             key={lang}
+              //             style={[
+              //               styles.filterButton,
+              //               selectedLanguage === lang && styles.filterButtonActive,
+              //             ]}
+              //             onPress={() => setSelectedLanguage(lang)}
+              //           >
+              //             <Text
+              //               style={[
+              //                 styles.filterButtonText,
+              //                 selectedLanguage === lang && styles.filterButtonTextActive,
+              //               ]}
+              //             >
+              //               {lang.charAt(0).toUpperCase() + lang.slice(1)}
+              //             </Text>
+              //           </TouchableOpacity>
+              //         ))}
+              //       </ScrollView>
+              //     </View>
 
-                  {/* Geographical Region Section */}
-                  <View style={styles.filterSection}>
-                    <Text style={styles.filterTitle}>Geographical Region (States of India)</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.filterButtons}
-                    >
-                      {states.map((state) => (
-                        <TouchableOpacity
-                          key={state}
-                          style={[
-                            styles.filterButton,
-                            selectedState === state && styles.filterButtonActive,
-                          ]}
-                          onPress={() => setSelectedState(state)}
-                        >
-                          <Text
-                            style={[
-                              styles.filterButtonText,
-                              selectedState === state && styles.filterButtonTextActive,
-                            ]}
-                          >
-                            {state}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-                </View>
-              }
+              //     {/* Geographical Region Section */}
+              //     <View style={styles.filterSection}>
+              //       <Text style={styles.filterTitle}>Geographical Region (States of India)</Text>
+              //       <ScrollView
+              //         horizontal
+              //         showsHorizontalScrollIndicator={false}
+              //         style={styles.filterButtons}
+              //       >
+              //         {states.map((state) => (
+              //           <TouchableOpacity
+              //             key={state}
+              //             style={[
+              //               styles.filterButton,
+              //               selectedState === state && styles.filterButtonActive,
+              //             ]}
+              //             onPress={() => setSelectedState(state)}
+              //           >
+              //             <Text
+              //               style={[
+              //                 styles.filterButtonText,
+              //                 selectedState === state && styles.filterButtonTextActive,
+              //               ]}
+              //             >
+              //               {state}
+              //             </Text>
+              //           </TouchableOpacity>
+              //         ))}
+              //       </ScrollView>
+              //     </View>
+              //   </View>
+              // }
               data={mergeNewsWithAds()}
               renderItem={renderItem}
               keyExtractor={(item, index) => {
@@ -761,39 +746,105 @@ const fetchShorts = async () => {
 >
   <View style={styles.modalOverlay}>
     <View style={styles.rewardModal}>
-      {/* Header */}
-      <View style={styles.headerRow}>
-        <Text style={styles.rewardTitle}>🎉 Recharge Reward</Text>
 
-        <TouchableOpacity onPress={() => setShowCoinModal(false)}>
-          <MaterialIcons name="close" size={24} color="#000" />
+      {/* Header */}
+
+      <View style={styles.headerRow}>
+
+        <Text style={styles.rewardTitle}>
+          🎉 Recharge Reward Program
+        </Text>
+
+        <TouchableOpacity
+          onPress={() => setShowCoinModal(false)}
+        >
+          <MaterialIcons
+            name="close"
+            size={24}
+            color="#000"
+          />
         </TouchableOpacity>
+
       </View>
 
       {/* Description */}
+
       <Text style={styles.rewardText}>
-        Your mobile recharge will be done in{" "}
-        <Text style={styles.highlightText}>50 days</Text>. Enter your
-        mobile number to participate.
+       Enter your mobile number to participate in our Recharge Reward Program. Eligible participants may receive a complimentary recharge.
       </Text>
 
-      {/* Mobile Number Input */}
+      {/* Mobile Number */}
+
+      <Text style={styles.inputLabel}>
+        Mobile Number
+      </Text>
+
       <TextInput
-        placeholder="Mobile number"
+        placeholder="Enter your mobile number"
         keyboardType="phone-pad"
+        maxLength={10}
         style={styles.mobileInput}
       />
 
-      {/* Submit Button */}
+      {/* Notice */}
+
+      <View style={styles.noticeBox}>
+
+        <MaterialIcons
+          name="info"
+          color="#D90429"
+          size={20}
+        />
+
+        <Text style={styles.noticeText}>
+          Submission of your mobile number does not guarantee a recharge.
+          Rewards are provided only to eligible participants according to the
+          promotional campaign rules.
+        </Text>
+
+      </View>
+
+      {/* Terms */}
+
+      <TouchableOpacity
+        style={styles.termsRow}
+        onPress={() => {
+          setShowCoinModal(false);
+          router.push("/recharge");
+        }}
+      >
+        <MaterialIcons
+          name="description"
+          color="#D90429"
+          size={20}
+        />
+
+        <Text style={styles.termsText}>
+          I have read the Recharge Reward Terms & Conditions
+        </Text>
+
+      </TouchableOpacity>
+
+      {/* Button */}
+
       <TouchableOpacity
         style={styles.submitButton}
         onPress={() => {
-          // Submit logic here
+          // submit logic
           setShowCoinModal(false);
         }}
       >
-        <Text style={styles.submitButtonText}>Submit</Text>
+        <Text style={styles.submitButtonText}>
+          Participate
+        </Text>
       </TouchableOpacity>
+
+      {/* Footer */}
+
+      <Text style={styles.footerText}>
+        Participation is voluntary and free of charge.
+      </Text>
+
     </View>
   </View>
 </Modal>
@@ -875,25 +926,191 @@ const fetchShorts = async () => {
       </Modal>
 
       {/* News Detail Modal */}
-      <Modal visible={selectedNews !== null} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.newsDetailModal}>
-            <View style={styles.newsDetailHeader}>
-              <Text style={styles.newsDetailTitle}>News Details</Text>
-              <TouchableOpacity onPress={() => setSelectedNews(null)}>
-                <MaterialIcons name="close" size={24} color="#000" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.newsDetailScroll}>
-              {selectedNews?.imageUrl && (
-                <Image source={{ uri: selectedNews.imageUrl }} style={styles.newsDetailImage} />
-              )}
-              <Text style={styles.newsDetailTitleText}>{selectedNews?.title}</Text>
-              <Text style={styles.newsDetailContent}>{selectedNews?.content}</Text>
-            </ScrollView>
-          </View>
+      <Modal
+  visible={selectedNews !== null}
+  animationType="slide"
+  presentationStyle="fullScreen"
+  onRequestClose={() => setSelectedNews(null)}
+>
+  <SafeAreaView style={styles.newsModalContainer}>
+
+    {/* Header */}
+
+    <View style={styles.newsTopBar}>
+
+      <TouchableOpacity onPress={() => setSelectedNews(null)}>
+        <MaterialIcons
+          name="arrow-back"
+          size={28}
+          color="#222"
+        />
+      </TouchableOpacity>
+
+      <Text style={styles.publisherName}>
+        The Bharat Evolution
+      </Text>
+
+    </View>
+
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+    >
+
+      {!!selectedNews?.imageUrl && (
+
+        <Image
+          source={{ uri: selectedNews.imageUrl }}
+          style={styles.detailImage}
+        />
+
+      )}
+
+      <View style={styles.detailContainer}>
+
+        <View style={styles.categoryChip}>
+
+          <Text style={styles.categoryChipText}>
+            {selectedNews?.category}
+          </Text>
+
         </View>
-      </Modal>
+
+        <Text style={styles.detailTitle}>
+          {selectedNews?.title}
+        </Text>
+
+        <View style={styles.authorRow}>
+
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              E
+            </Text>
+          </View>
+
+          <View style={{ flex: 1 }}>
+
+            <Text style={styles.authorName}>
+              The Bharat Evolution Team
+            </Text>
+
+            <Text style={styles.publisher}>
+              The Bharat Evolution
+            </Text>
+
+          </View>
+
+        </View>
+
+        <View style={styles.metaCard}>
+
+          <View style={styles.metaItem}>
+            <MaterialIcons
+              name="calendar-today"
+              size={18}
+              color="#D90429"
+            />
+            <Text style={styles.metaText}>
+              9 July 2026
+            </Text>
+          </View>
+
+          <View style={styles.metaItem}>
+            <MaterialIcons
+              name="schedule"
+              size={18}
+              color="#D90429"
+            />
+            <Text style={styles.metaText}>
+              4 min read
+            </Text>
+          </View>
+
+          <View style={styles.metaItem}>
+            <MaterialIcons
+              name="location-on"
+              size={18}
+              color="#D90429"
+            />
+            <Text style={styles.metaText}>
+              {selectedNews?.state}
+            </Text>
+          </View>
+
+        </View>
+
+        <Text style={styles.sectionHeading}>
+          Article
+        </Text>
+
+        <Text style={styles.articleText}>
+          {selectedNews?.content}
+        </Text>
+
+        <View style={styles.aboutCard}>
+
+          <Text style={styles.aboutTitle}>
+            About this article
+          </Text>
+
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Publisher</Text>
+            <Text style={styles.infoValue}>
+              The Bharat Evolution
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Author</Text>
+            <Text style={styles.infoValue}>
+              The Bharat Evolution Team
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Category</Text>
+            <Text style={styles.infoValue}>
+              {selectedNews?.category}
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Language</Text>
+            <Text style={styles.infoValue}>
+              {selectedNews?.language}
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Region</Text>
+            <Text style={styles.infoValue}>
+              {selectedNews?.state}
+            </Text>
+          </View>
+
+        </View>
+
+        <View style={styles.noticeCard}>
+
+          <Text style={styles.noticeTitle}>
+            Editorial Notice
+          </Text>
+
+          <Text style={styles.noticeText}>
+            This article has been published by The Bharat Evolution Editorial
+            Team. We strive to provide timely and accurate news. If you believe
+            any information requires correction or clarification, please contact
+            us through the Contact Us page available within the application.
+          </Text>
+
+        </View>
+
+      </View>
+
+    </ScrollView>
+
+  </SafeAreaView>
+
+</Modal>
     </SafeAreaView>
   );
 }
@@ -1069,26 +1286,27 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   adCard: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#DC143C',
-  },
+  backgroundColor: '#F5F5F5',
+  borderRadius: 16,
+  padding: 20,
+  marginVertical: 20,
+  borderWidth: 2,
+  borderColor: '#DC143C',
+},
+
+adImage: {
+  width: '100%',
+  height: 350,
+  resizeMode: 'cover',
+  borderRadius: 12,
+},
   adLabel: {
     fontSize: 10,
     fontWeight: 'bold',
     color: '#DC143C',
     marginBottom: 8,
   },
-  adImage: {
-    width: '100%',
-    height: 150,
-    resizeMode: 'contain',
-    marginBottom: 8,
-  },
+
   adTitle: {
     fontSize: 14,
     fontWeight: '600',
@@ -1540,5 +1758,217 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginVertical: 4,
   },
+  newsModalContainer:{
+flex:1,
+backgroundColor:"#fff",
+},
+
+newsTopBar:{
+height:60,
+paddingHorizontal:16,
+flexDirection:"row",
+alignItems:"center",
+justifyContent:"space-between",
+borderBottomWidth:1,
+borderBottomColor:"#EFEFEF",
+},
+
+publisherName:{
+fontSize:18,
+fontWeight:"700",
+color:"#D90429",
+},
+
+detailImage:{
+width:"100%",
+height:250,
+},
+
+detailContainer:{
+padding:20,
+},
+
+categoryChip:{
+alignSelf:"flex-start",
+backgroundColor:"#FFE5E5",
+paddingHorizontal:14,
+paddingVertical:6,
+borderRadius:20,
+marginBottom:15,
+},
+
+categoryChipText:{
+color:"#D90429",
+fontWeight:"700",
+fontSize:13,
+},
+
+detailTitle:{
+fontSize:28,
+fontWeight:"700",
+lineHeight:38,
+color:"#111",
+marginBottom:20,
+},
+
+authorRow:{
+flexDirection:"row",
+alignItems:"center",
+marginBottom:20,
+},
+
+avatar:{
+width:48,
+height:48,
+borderRadius:24,
+backgroundColor:"#D90429",
+justifyContent:"center",
+alignItems:"center",
+marginRight:12,
+},
+
+avatarText:{
+fontSize:20,
+fontWeight:"700",
+color:"#fff",
+},
+
+authorName:{
+fontSize:16,
+fontWeight:"700",
+},
+
+publisher:{
+fontSize:13,
+color:"#888",
+marginTop:3,
+},
+
+metaCard:{
+backgroundColor:"#F8F8F8",
+borderRadius:14,
+padding:16,
+marginBottom:25,
+},
+
+metaItem:{
+flexDirection:"row",
+alignItems:"center",
+marginBottom:10,
+},
+
+metaText:{
+marginLeft:10,
+fontSize:14,
+color:"#444",
+},
+
+sectionHeading:{
+fontSize:22,
+fontWeight:"700",
+marginBottom:15,
+color:"#111",
+},
+
+articleText:{
+fontSize:17,
+lineHeight:30,
+color:"#444",
+textAlign:"justify",
+},
+
+aboutCard:{
+marginTop:30,
+padding:20,
+backgroundColor:"#FFF8F8",
+borderRadius:16,
+},
+
+aboutTitle:{
+fontSize:18,
+fontWeight:"700",
+marginBottom:16,
+color:"#D90429",
+},
+
+infoRow:{
+flexDirection:"row",
+justifyContent:"space-between",
+marginBottom:12,
+},
+
+infoLabel:{
+fontWeight:"600",
+color:"#666",
+},
+
+infoValue:{
+fontWeight:"700",
+color:"#111",
+},
+
+noticeCard:{
+marginTop:24,
+backgroundColor:"#FFF5E5",
+padding:18,
+borderRadius:16,
+marginBottom:40,
+},
+
+noticeTitle:{
+fontWeight:"700",
+fontSize:17,
+color:"#D97706",
+marginBottom:10,
+},
+
+noticeText:{
+fontSize:15,
+lineHeight:24,
+color:"#555",
+},
+noticeBox: {
+  flexDirection: "row",
+  alignItems: "flex-start",
+  backgroundColor: "#FFF5F5",
+  borderRadius: 10,
+  padding: 12,
+  marginBottom: 16,
+},
+// noticeText: {
+//   flex: 1,
+//   marginLeft: 10,
+//   color: "#555",
+//   lineHeight: 20,
+//   fontSize: 13,
+// },
+
+inputLabel: {
+  fontWeight: "700",
+  color: "#333",
+  marginBottom: 8,
+  fontSize: 15,
+},
+
+termsRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  marginBottom: 20,
+},
+
+termsText: {
+  color: "#D90429",
+  marginLeft: 8,
+  fontWeight: "600",
+  textDecorationLine: "underline",
+  flex: 1,
+},
+
+footerText: {
+  marginTop: 14,
+  textAlign: "center",
+  color: "#777",
+  fontSize: 12,
+},
 });
 
